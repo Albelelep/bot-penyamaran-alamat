@@ -1,6 +1,7 @@
 import logging
 import random
 import re
+import uuid
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
@@ -85,6 +86,9 @@ class AddressObfuscator:
 # Initialize obfuscator
 obfuscator = AddressObfuscator()
 
+# Temporary storage for user addresses (in production, use a proper database)
+user_addresses = {}
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     welcome_message = """Selamat datang! Silahkan kirim alamat wilayah kamu:
@@ -98,6 +102,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def handle_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle address input from user"""
     user_input = update.message.text
+    user_id = update.effective_user.id
     
     # Parse the address
     address_data = obfuscator.parse_address(user_input)
@@ -112,8 +117,11 @@ async def handle_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Generate obfuscated address
     result = obfuscator.create_obfuscated_address(address_data)
     
+    # Store the address for regeneration (use user_id as key)
+    user_addresses[user_id] = user_input
+    
     # Create inline keyboard for "Generate Again" button
-    keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate:{user_input}")]]
+    keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate_{user_id}")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     result_message = f"✅ **Hasil:**\n\n{result}"
@@ -125,22 +133,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
     
-    if query.data.startswith("regenerate:"):
-        # Extract the original address from callback data
-        original_address = query.data.replace("regenerate:", "")
+    if query.data.startswith("regenerate_"):
+        # Extract user_id from callback data
+        user_id = int(query.data.replace("regenerate_", ""))
         
-        # Parse and generate new obfuscated address
-        address_data = obfuscator.parse_address(original_address)
-        if address_data:
-            result = obfuscator.create_obfuscated_address(address_data)
+        # Get the stored address
+        if user_id in user_addresses:
+            original_address = user_addresses[user_id]
             
-            # Create the same button again
-            keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate:{original_address}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            result_message = f"✅ **Hasil Baru:**\n\n{result}"
-            
-            await query.edit_message_text(result_message, parse_mode='Markdown', reply_markup=reply_markup)
+            # Parse and generate new obfuscated address
+            address_data = obfuscator.parse_address(original_address)
+            if address_data:
+                result = obfuscator.create_obfuscated_address(address_data)
+                
+                # Create the same button again
+                keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate_{user_id}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                result_message = f"✅ **Hasil Baru:**\n\n{result}"
+                
+                await query.edit_message_text(result_message, parse_mode='Markdown', reply_markup=reply_markup)
+        else:
+            await query.edit_message_text("❌ Data alamat tidak ditemukan. Silakan kirim alamat baru.")
 
 def main() -> None:
     """Start the bot."""
