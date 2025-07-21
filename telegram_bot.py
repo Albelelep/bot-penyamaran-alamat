@@ -13,9 +13,20 @@ logger = logging.getLogger(__name__)
 
 class AddressObfuscator:
     def __init__(self):
-        # Mapping untuk obfuscation (leetspeak style)
-        self.obfuscation_map = {
-            'a': '4', 'e': '3', 'i': '1', 'o': '0', 's': '5', 't': '7', 'g': '9'
+        # Multiple mapping options untuk obfuscation (leetspeak style)
+        self.obfuscation_options = {
+            'a': ['4', '@', 'a'],
+            'e': ['3', 'e', '€'],
+            'i': ['1', 'i', '!'],
+            'o': ['0', 'o', 'ø'],
+            's': ['5', 's', '$'],
+            't': ['7', 't', '+'],
+            'g': ['9', 'g', '6'],
+            'l': ['1', 'l', '|'],
+            'b': ['6', 'b', '8'],
+            'z': ['2', 'z', '7'],
+            'r': ['r', 'R', '®'],
+            'n': ['n', 'N', 'ñ']
         }
     
     def generate_fake_coordinates(self):
@@ -41,11 +52,13 @@ class AddressObfuscator:
         return code
     
     def obfuscate_text(self, text):
-        """Obfuscate text using leetspeak"""
+        """Obfuscate text using randomized leetspeak variations"""
         result = ""
         for char in text.lower():
-            if char in self.obfuscation_map:
-                result += self.obfuscation_map[char]
+            if char in self.obfuscation_options:
+                # Randomly choose from available options for this character
+                options = self.obfuscation_options[char]
+                result += random.choice(options)
             else:
                 result += char
         return result
@@ -66,28 +79,30 @@ class AddressObfuscator:
             'negara': parts[5]
         }
     
-    def create_obfuscated_address(self, address_data):
-        """Create obfuscated version of the address"""
+    def create_obfuscated_address(self, address_data, detailed_address):
+        """Create obfuscated version of the address with both structured and detailed parts"""
         coords, plus_code = self.generate_fake_coordinates()
         
-        # Obfuscate the main address parts
-        obfuscated_kelurahan = self.obfuscate_text(address_data['kelurahan'])
-        obfuscated_kecamatan = self.obfuscate_text(address_data['kecamatan'])
+        # Obfuscate the detailed address
+        obfuscated_detailed = self.obfuscate_text(detailed_address)
         
         # Create formatted result
         original_address = f"{address_data['kelurahan']}, {address_data['kecamatan']}, {address_data['kabupaten']}, {address_data['provinsi']}, {address_data['kode_pos']}, {address_data['negara']}"
         
-        obfuscated_address = f"{obfuscated_kelurahan}, {obfuscated_kecamatan}"
-        
-        result = f"```\n{plus_code}, {obfuscated_address}, {address_data['kabupaten']}, {address_data['provinsi']}, {address_data['kode_pos']}, {address_data['negara']}\n\n...{obfuscated_address}\n```"
+        result = f"```\n{plus_code}, {address_data['kelurahan']}, {address_data['kecamatan']}, {address_data['kabupaten']}, {address_data['provinsi']}, {address_data['kode_pos']}, {address_data['negara']}\n\n...{obfuscated_detailed}\n```"
         
         return result
 
 # Initialize obfuscator
 obfuscator = AddressObfuscator()
 
-# Temporary storage for user addresses (in production, use a proper database)
-user_addresses = {}
+# Temporary storage for user data (in production, use a proper database)
+user_data = {}
+
+# User states
+STATE_WAITING_STRUCTURED = "waiting_structured"
+STATE_WAITING_DETAILED = "waiting_detailed"
+STATE_COMPLETED = "completed"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -104,29 +119,64 @@ async def handle_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_input = update.message.text
     user_id = update.effective_user.id
     
-    # Parse the address
-    address_data = obfuscator.parse_address(user_input)
+    # Initialize user data if not exists
+    if user_id not in user_data:
+        user_data[user_id] = {'state': STATE_WAITING_STRUCTURED}
     
-    if not address_data:
-        error_message = """❌ **Format tidak lengkap!**
+    current_state = user_data[user_id]['state']
+    
+    if current_state == STATE_WAITING_STRUCTURED:
+        # First input: structured address
+        address_data = obfuscator.parse_address(user_input)
+        
+        if not address_data:
+            error_message = """❌ **Format tidak lengkap!**
 
 📝 **Contoh:** kelurahan, kecamatan, kabupaten, provinsi, kode pos, negara"""
-        await update.message.reply_text(error_message, parse_mode='Markdown')
-        return
-    
-    # Generate obfuscated address
-    result = obfuscator.create_obfuscated_address(address_data)
-    
-    # Store the address for regeneration (use user_id as key)
-    user_addresses[user_id] = user_input
-    
-    # Create inline keyboard for "Generate Again" button
-    keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate_{user_id}")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    result_message = f"✅ **Hasil:**\n\n{result}"
-    
-    await update.message.reply_text(result_message, parse_mode='Markdown', reply_markup=reply_markup)
+            await update.message.reply_text(error_message, parse_mode='Markdown')
+            return
+        
+        # Store structured address and move to next state
+        user_data[user_id]['structured_address'] = address_data
+        user_data[user_id]['structured_input'] = user_input
+        user_data[user_id]['state'] = STATE_WAITING_DETAILED
+        
+        # Ask for detailed address
+        detailed_message = """✅ **Alamat wilayah diterima!**
+
+Sekarang kirim alamat detail kamu (bebas format):
+
+📝 **Contoh:** jl guru mughni no 21B, sebrang menara prima"""
+        await update.message.reply_text(detailed_message, parse_mode='Markdown')
+        
+    elif current_state == STATE_WAITING_DETAILED:
+        # Second input: detailed address
+        detailed_address = user_input.strip()
+        
+        if not detailed_address:
+            await update.message.reply_text("❌ **Alamat detail tidak boleh kosong!**", parse_mode='Markdown')
+            return
+        
+        # Store detailed address
+        user_data[user_id]['detailed_address'] = detailed_address
+        user_data[user_id]['state'] = STATE_COMPLETED
+        
+        # Generate obfuscated address with both inputs
+        structured_data = user_data[user_id]['structured_address']
+        result = obfuscator.create_obfuscated_address(structured_data, detailed_address)
+        
+        # Create inline keyboard for "Generate Again" button
+        keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate_{user_id}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        result_message = f"✅ **Hasil:**\n\n{result}"
+        
+        await update.message.reply_text(result_message, parse_mode='Markdown', reply_markup=reply_markup)
+        
+    else:
+        # User has completed the process, treat as new structured address input
+        user_data[user_id] = {'state': STATE_WAITING_STRUCTURED}
+        await handle_address(update, context)  # Recursive call to handle as new structured input
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle button callbacks"""
@@ -137,24 +187,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Extract user_id from callback data
         user_id = int(query.data.replace("regenerate_", ""))
         
-        # Get the stored address
-        if user_id in user_addresses:
-            original_address = user_addresses[user_id]
+        # Get the stored data
+        if user_id in user_data and user_data[user_id]['state'] == STATE_COMPLETED:
+            structured_data = user_data[user_id]['structured_address']
+            detailed_address = user_data[user_id]['detailed_address']
             
-            # Parse and generate new obfuscated address
-            address_data = obfuscator.parse_address(original_address)
-            if address_data:
-                result = obfuscator.create_obfuscated_address(address_data)
-                
-                # Create the same button again
-                keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate_{user_id}")]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                result_message = f"✅ **Hasil Baru:**\n\n{result}"
-                
-                await query.edit_message_text(result_message, parse_mode='Markdown', reply_markup=reply_markup)
+            # Generate new obfuscated address
+            result = obfuscator.create_obfuscated_address(structured_data, detailed_address)
+            
+            # Create the same button again
+            keyboard = [[InlineKeyboardButton("🔄 Generate Lagi", callback_data=f"regenerate_{user_id}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            result_message = f"✅ **Hasil Baru:**\n\n{result}"
+            
+            await query.edit_message_text(result_message, parse_mode='Markdown', reply_markup=reply_markup)
         else:
-            await query.edit_message_text("❌ Data alamat tidak ditemukan. Silakan kirim alamat baru.")
+            await query.edit_message_text("❌ Data alamat tidak ditemukan. Silakan kirim alamat baru dengan /start")
 
 def main() -> None:
     """Start the bot."""
