@@ -83,13 +83,18 @@ class AddressObfuscator:
         """Create obfuscated version of the address with both structured and detailed parts"""
         coords, plus_code = self.generate_fake_coordinates()
         
-        # Obfuscate the detailed address
+        # Obfuscate both structured address parts and detailed address
+        obfuscated_kelurahan = self.obfuscate_text(address_data['kelurahan'])
+        obfuscated_kecamatan = self.obfuscate_text(address_data['kecamatan'])
+        obfuscated_kabupaten = self.obfuscate_text(address_data['kabupaten'])
+        obfuscated_provinsi = self.obfuscate_text(address_data['provinsi'])
+        obfuscated_negara = self.obfuscate_text(address_data['negara'])
         obfuscated_detailed = self.obfuscate_text(detailed_address)
         
-        # Create formatted result
-        original_address = f"{address_data['kelurahan']}, {address_data['kecamatan']}, {address_data['kabupaten']}, {address_data['provinsi']}, {address_data['kode_pos']}, {address_data['negara']}"
+        # Create formatted result with obfuscated structured address
+        obfuscated_structured = f"{obfuscated_kelurahan}, {obfuscated_kecamatan}, {obfuscated_kabupaten}, {obfuscated_provinsi}, {address_data['kode_pos']}, {obfuscated_negara}"
         
-        result = f"```\n{plus_code}, {address_data['kelurahan']}, {address_data['kecamatan']}, {address_data['kabupaten']}, {address_data['provinsi']}, {address_data['kode_pos']}, {address_data['negara']}\n\n...{obfuscated_detailed}\n```"
+        result = f"```\n{plus_code}, {obfuscated_structured}\n\n...{obfuscated_detailed}\n```"
         
         return result
 
