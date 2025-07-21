@@ -13,20 +13,20 @@ logger = logging.getLogger(__name__)
 
 class AddressObfuscator:
     def __init__(self):
-        # Multiple mapping options untuk obfuscation (leetspeak style)
+        # Simple mapping options untuk obfuscation (easy to read)
         self.obfuscation_options = {
-            'a': ['4', '@', 'a'],
-            'e': ['3', 'e', '€'],
-            'i': ['1', 'i', '!'],
-            'o': ['0', 'o', 'ø'],
-            's': ['5', 's', '$'],
-            't': ['7', 't', '+'],
-            'g': ['9', 'g', '6'],
-            'l': ['1', 'l', '|'],
-            'b': ['6', 'b', '8'],
-            'z': ['2', 'z', '7'],
-            'r': ['r', 'R', '®'],
-            'n': ['n', 'N', 'ñ']
+            'a': ['4', 'a'],
+            'e': ['3', 'e'], 
+            'i': ['1', 'i'],
+            'o': ['0', 'o'],
+            's': ['5', 's'],
+            't': ['7', 't'],
+            'g': ['9', 'g'],
+            'l': ['1', 'l'],
+            'b': ['6', 'b'],
+            'z': ['2', 'z'],
+            'r': ['r', 'R'],
+            'n': ['n', 'N']
         }
     
     def generate_fake_coordinates(self):
